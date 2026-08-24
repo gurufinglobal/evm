@@ -27,37 +27,54 @@ func (s *KeeperTestSuite) TestOnRecvPacket() {
 	)
 	testCases := []struct {
 		name     string
-		malleate func()
+		malleate func() *uint64
 		expErr   error
 	}{
 		{
+			"packet data is transfer with receiver account already existing",
+			func() *uint64 {
+				receiverAcc, err := sdk.AccAddressFromBech32(receiver)
+				s.Require().NoError(err)
+
+				acc := s.network.App.GetAccountKeeper().NewAccountWithAddress(ctx, receiverAcc)
+				s.network.App.GetAccountKeeper().SetAccount(ctx, acc)
+				s.Require().True(s.network.App.GetAccountKeeper().HasAccount(ctx, receiverAcc))
+				accountNumber := acc.GetAccountNumber()
+				return &accountNumber
+			},
+			types.ErrContractHasNoCode,
+		},
+		{
 			"contract code does not exist",
-			func() {},
+			func() *uint64 { return nil },
 			types.ErrContractHasNoCode,
 		},
 		{
 			"packet data is not transfer",
-			func() {
+			func() *uint64 {
 				packet.Data = []byte("not a transfer packet")
+				return nil
 			},
 			ibcerrors.ErrInvalidType,
 		},
 		{
 			"packet data is transfer but receiver is not isolated address",
-			func() {
+			func() *uint64 {
 				receiver = senderKey.AccAddr.String() // not an isolated address
 				transferData.Receiver = receiver
 				transferDataBz := transferData.GetBytes()
 				packet.Data = transferDataBz
+				return nil
 			},
 			types.ErrInvalidReceiverAddress,
 		},
 		{
 			"packet data is transfer but callback data is not valid",
-			func() {
+			func() *uint64 {
 				transferData.Memo = fmt.Sprintf(`{"dest_callback": {"address": 10, "calldata": "%x"}}`, []byte("calldata"))
 				transferDataBz := transferData.GetBytes()
 				packet.Data = transferDataBz
+				return nil
 			},
 			cbtypes.ErrInvalidCallbackData,
 		},
@@ -93,9 +110,14 @@ func (s *KeeperTestSuite) TestOnRecvPacket() {
 		)
 		ack := channeltypes.NewResultAcknowledgement([]byte{1})
 
-		tc.malleate()
+		originalAccountNumber := tc.malleate()
 
 		err := s.network.App.GetCallbackKeeper().IBCReceivePacketCallback(ctx, packet, ack, contract.Hex(), transfertypes.V1)
+		if originalAccountNumber != nil {
+			acc := s.network.App.GetAccountKeeper().GetAccount(ctx, sdk.MustAccAddressFromBech32(receiver))
+			s.Require().NotNil(acc)
+			s.Require().Equal(*originalAccountNumber, acc.GetAccountNumber(), "account number should not be modified")
+		}
 		if tc.expErr != nil {
 			s.Require().Contains(err.Error(), tc.expErr.Error(), "expected error: %s, got: %s", tc.expErr.Error(), err.Error())
 		} else {

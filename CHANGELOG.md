@@ -20,6 +20,7 @@
 - [\#817](https://github.com/cosmos/evm/pull/817), [\#920](https://github.com/cosmos/evm/pull/920) Decode validator operator addresses for `block.coinbase` and return zero when no proposer exists.
 - [\#992](https://github.com/cosmos/evm/pull/992) Respect smaller positive gas caps in internal EVM calls.
 - [\#965](https://github.com/cosmos/evm/pull/965), [\#1083](https://github.com/cosmos/evm/pull/1083) Avoid double charging EVM gas in IBC timeout callbacks.
+- [\#970](https://github.com/cosmos/evm/pull/970) Preserve existing receiver account numbers in IBC destination callbacks.
 
 ## v0.6.2
 
