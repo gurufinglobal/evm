@@ -6,12 +6,20 @@ import (
 	errorsmod "cosmossdk.io/errors"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
-// GetCoinbaseAddress returns the block proposer's validator operator address.
+// GetCoinbaseAddress converts the block proposer's validator operator address to an Ethereum address
+// for use as block.coinbase in the EVM.
 func (k Keeper) GetCoinbaseAddress(ctx sdk.Context, proposerAddress sdk.ConsAddress) (common.Address, error) {
-	validator, err := k.stakingKeeper.GetValidatorByConsAddr(ctx, GetProposerAddress(ctx, proposerAddress))
+	proposerAddress = GetProposerAddress(ctx, proposerAddress)
+	if len(proposerAddress) == 0 {
+		// The proposer can be absent in contexts such as CheckTx.
+		return common.Address{}, nil
+	}
+
+	validator, err := k.stakingKeeper.GetValidatorByConsAddr(ctx, proposerAddress)
 	if err != nil {
 		return common.Address{}, errorsmod.Wrapf(
 			stakingtypes.ErrNoValidatorFound,
@@ -21,8 +29,26 @@ func (k Keeper) GetCoinbaseAddress(ctx sdk.Context, proposerAddress sdk.ConsAddr
 		)
 	}
 
-	coinbase := common.BytesToAddress([]byte(validator.GetOperator()))
-	return coinbase, nil
+	operatorAddress := validator.GetOperator()
+	operatorAddressBytes, err := k.stakingKeeper.ValidatorAddressCodec().StringToBytes(operatorAddress)
+	if err != nil {
+		return common.Address{}, errorsmod.Wrapf(
+			err,
+			"failed to convert validator operator address %s to bytes",
+			operatorAddress,
+		)
+	}
+	if len(operatorAddressBytes) != common.AddressLength {
+		return common.Address{}, errorsmod.Wrapf(
+			sdkerrors.ErrInvalidAddress,
+			"validator operator address %s must decode to %d bytes, got %d",
+			operatorAddress,
+			common.AddressLength,
+			len(operatorAddressBytes),
+		)
+	}
+
+	return common.BytesToAddress(operatorAddressBytes), nil
 }
 
 // GetProposerAddress returns current block proposer's address when provided proposer address is empty.
