@@ -2,12 +2,16 @@ package keeper
 
 import (
 	"encoding/json"
+	"math/big"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cosmos/evm/x/ibc/callbacks/types"
+	"github.com/cosmos/evm/x/vm/statedb"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
 	callbacktypes "github.com/cosmos/ibc-go/v10/modules/apps/callbacks/types"
 	transfertypes "github.com/cosmos/ibc-go/v10/modules/apps/transfer/types"
 	clienttypes "github.com/cosmos/ibc-go/v10/modules/core/02-client/types"
@@ -19,6 +23,29 @@ import (
 	sdktestutil "github.com/cosmos/cosmos-sdk/testutil"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
+
+type gasMeteringEVMKeeper struct {
+	types.EVMKeeper
+	gasUsed uint64
+}
+
+func (gasMeteringEVMKeeper) IsContract(sdk.Context, common.Address) bool {
+	return true
+}
+
+func (k gasMeteringEVMKeeper) CallEVM(
+	ctx sdk.Context,
+	_ *statedb.StateDB,
+	_ abi.ABI,
+	_, _ common.Address,
+	_, _ bool,
+	_ *big.Int,
+	_ string,
+	_ ...interface{},
+) (*evmtypes.MsgEthereumTxResponse, error) {
+	ctx.GasMeter().ConsumeGas(k.gasUsed, "test EVM execution")
+	return &evmtypes.MsgEthereumTxResponse{GasUsed: k.gasUsed}, nil
+}
 
 func ensureBech32Config(t *testing.T) {
 	t.Helper()
@@ -118,4 +145,57 @@ func TestIBCOnTimeoutPacketCallback_RejectsMismatchedContractSender(t *testing.T
 			transfertypes.V1,
 		)
 	})
+}
+
+func TestIBCOnTimeoutPacketCallback_ChargesEVMGasOnce(t *testing.T) {
+	ensureBech32Config(t)
+	storeKey := storetypes.NewKVStoreKey("test")
+	tKey := storetypes.NewTransientStoreKey("test_t")
+	ctx := sdktestutil.DefaultContext(storeKey, tKey)
+	ctx = ctx.WithLogger(log.NewNopLogger())
+	ctx = ctx.WithGasMeter(storetypes.NewGasMeter(10_000_000))
+
+	const evmGasUsed uint64 = 25_000
+	sender := common.HexToAddress("0x5555555555555555555555555555555555555555")
+	senderBech32 := sdk.AccAddress(sender.Bytes()).String()
+	memoBz, err := json.Marshal(map[string]any{
+		callbacktypes.SourceCallbackKey: map[string]string{
+			"address":   sender.Hex(),
+			"gas_limit": "1000000",
+		},
+	})
+	require.NoError(t, err)
+
+	packetData := transfertypes.NewFungibleTokenPacketData(
+		"stake",
+		"1",
+		senderBech32,
+		senderBech32,
+		string(memoBz),
+	)
+	packetDataBz, err := transfertypes.MarshalPacketData(packetData, transfertypes.V1, transfertypes.EncodingJSON)
+	require.NoError(t, err)
+	packet := channeltypes.NewPacket(
+		packetDataBz,
+		1,
+		transfertypes.PortID,
+		"channel-0",
+		transfertypes.PortID,
+		"channel-1",
+		clienttypes.NewHeight(0, 100),
+		0,
+	)
+
+	k := NewKeeper(nil, gasMeteringEVMKeeper{gasUsed: evmGasUsed}, nil)
+	gasBefore := ctx.GasMeter().GasConsumed()
+	err = k.IBCOnTimeoutPacketCallback(
+		ctx,
+		packet,
+		sdk.AccAddress{},
+		sender.Hex(),
+		senderBech32,
+		transfertypes.V1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, evmGasUsed, ctx.GasMeter().GasConsumed()-gasBefore)
 }

@@ -19,6 +19,7 @@
 - [\#905](https://github.com/cosmos/evm/pull/905) Fix EIP-6780 same-transaction selfdestruct for pre-funded and empty-runtime contracts without preparatory account persistence.
 - [\#817](https://github.com/cosmos/evm/pull/817), [\#920](https://github.com/cosmos/evm/pull/920) Decode validator operator addresses for `block.coinbase` and return zero when no proposer exists.
 - [\#992](https://github.com/cosmos/evm/pull/992) Respect smaller positive gas caps in internal EVM calls.
+- [\#965](https://github.com/cosmos/evm/pull/965), [\#1083](https://github.com/cosmos/evm/pull/1083) Avoid double charging EVM gas in IBC timeout callbacks.
 
 ## v0.6.2
 

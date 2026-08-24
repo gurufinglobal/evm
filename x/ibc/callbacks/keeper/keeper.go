@@ -437,7 +437,7 @@ func (k ContractKeeper) IBCOnTimeoutPacketCallback(
 		return err
 	}
 
-	res, err := k.evmKeeper.CallEVM(ctx, stateDB, *abi, sender, contractAddr, true, false, math.NewIntFromUint64(cachedCtx.GasMeter().GasRemaining()).BigInt(), "onPacketTimeout",
+	res, err := k.evmKeeper.CallEVM(cachedCtx, stateDB, *abi, sender, contractAddr, true, false, math.NewIntFromUint64(cachedCtx.GasMeter().GasRemaining()).BigInt(), "onPacketTimeout",
 		packet.GetSourceChannel(), packet.GetSourcePort(), packet.GetSequence(), packet.GetData())
 	if err != nil {
 		return errorsmod.Wrapf(types.ErrCallbackFailed, "EVM returned error: %s", err.Error())
