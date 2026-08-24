@@ -231,11 +231,20 @@ func (suite *StateDBTestSuite) TestDBError() {
 			db.SelfDestruct(mocks.ErrAddress)
 			suite.Require().True(db.HasSelfDestructed(mocks.ErrAddress))
 		}},
+		{"delete EIP-6780 same-tx contract", func(db vm.StateDB) {
+			db.CreateAccount(mocks.ErrAddress)
+			db.SetCode(mocks.ErrAddress, []byte("code"))
+			db.CreateContract(mocks.ErrAddress)
+			db.SelfDestruct6780(mocks.ErrAddress)
+			suite.Require().True(db.HasSelfDestructed(mocks.ErrAddress))
+		}},
 	}
 	for _, tc := range testCases {
-		db := statedb.New(sdk.Context{}.WithEventManager(sdk.NewEventManager()), mocks.NewEVMKeeper(), emptyTxConfig)
-		tc.malleate(db)
-		suite.Require().Error(db.Commit())
+		suite.Run(tc.name, func() {
+			db := statedb.New(sdk.Context{}.WithEventManager(sdk.NewEventManager()), mocks.NewEVMKeeper(), emptyTxConfig)
+			tc.malleate(db)
+			suite.Require().Error(db.Commit())
+		})
 	}
 }
 
@@ -730,6 +739,158 @@ func (suite *StateDBTestSuite) TestSetStorage() {
 				db.SetState(contract, k, v)
 			}
 			tc.assert(db)
+		})
+	}
+}
+
+func (suite *StateDBTestSuite) TestEIP6780SameTxDeletion() {
+	testCases := []struct {
+		name                      string
+		malleate                  func(sdk.Context, *mocks.EVMKeeper) *statedb.StateDB
+		expSelfDestructed         bool
+		expKeeperCodeBeforeCommit []byte
+		expAccountExistsAfterTx   bool
+	}{
+		{
+			"new account",
+			func(ctx sdk.Context, keeper *mocks.EVMKeeper) *statedb.StateDB {
+				db := statedb.New(ctx, keeper, emptyTxConfig)
+				db.CreateAccount(address)
+				db.SetCode(address, []byte("code"))
+				db.AddBalance(address, uint256.NewInt(100), tracing.BalanceChangeUnspecified)
+				db.CreateContract(address)
+				return db
+			},
+			true,
+			nil,
+			false,
+		},
+		{
+			"pre-funded account",
+			func(ctx sdk.Context, keeper *mocks.EVMKeeper) *statedb.StateDB {
+				db := statedb.New(ctx, keeper, emptyTxConfig)
+				db.AddBalance(address, uint256.NewInt(50), tracing.BalanceChangeUnspecified)
+				suite.Require().NoError(db.Commit())
+				db = statedb.New(ctx, keeper, emptyTxConfig)
+				db.SetCode(address, []byte("contract code"))
+				db.CreateContract(address)
+				return db
+			},
+			true,
+			nil,
+			false,
+		},
+		{
+			"pre-funded account with empty runtime",
+			func(ctx sdk.Context, keeper *mocks.EVMKeeper) *statedb.StateDB {
+				db := statedb.New(ctx, keeper, emptyTxConfig)
+				db.AddBalance(address, uint256.NewInt(50), tracing.BalanceChangeUnspecified)
+				suite.Require().NoError(db.Commit())
+				db = statedb.New(ctx, keeper, emptyTxConfig)
+				db.SetCode(address, nil)
+				db.CreateContract(address)
+				return db
+			},
+			true,
+			nil,
+			false,
+		},
+		{
+			"existing contract from prior tx",
+			func(ctx sdk.Context, keeper *mocks.EVMKeeper) *statedb.StateDB {
+				db := statedb.New(ctx, keeper, emptyTxConfig)
+				db.CreateAccount(address)
+				db.SetCode(address, []byte("existing contract"))
+				db.AddBalance(address, uint256.NewInt(10), tracing.BalanceChangeUnspecified)
+				db.CreateContract(address)
+				suite.Require().NoError(db.Commit())
+				return statedb.New(ctx, keeper, emptyTxConfig)
+			},
+			false,
+			[]byte("existing contract"),
+			true,
+		},
+	}
+
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			ctx := sdk.Context{}.WithEventManager(sdk.NewEventManager())
+			keeper := mocks.NewEVMKeeper()
+			db := tc.malleate(ctx, keeper)
+
+			_, selfDestructed := db.SelfDestruct6780(address)
+			suite.Require().Equal(tc.expSelfDestructed, selfDestructed)
+			suite.Require().Equal(tc.expSelfDestructed, db.HasSelfDestructed(address))
+			codeHash := db.GetCodeHash(address)
+			suite.Require().Equal(tc.expKeeperCodeBeforeCommit, keeper.GetCode(ctx, codeHash))
+
+			err := db.Commit()
+			suite.Require().NoError(err)
+
+			db = statedb.New(ctx, keeper, emptyTxConfig)
+			suite.Require().Equal(tc.expAccountExistsAfterTx, db.Exist(address))
+			if tc.expAccountExistsAfterTx {
+				suite.Require().Equal(tc.expKeeperCodeBeforeCommit, keeper.GetCode(ctx, db.GetCodeHash(address)))
+			} else {
+				suite.Require().Empty(keeper.GetCode(ctx, codeHash))
+			}
+		})
+	}
+}
+
+func (suite *StateDBTestSuite) TestEIP6780SharedCodeRetention() {
+	sharedCode := []byte("shared contract code")
+	sharedCodeHash := crypto.Keccak256Hash(sharedCode)
+
+	testCases := []struct {
+		name     string
+		malleate func(sdk.Context, *mocks.EVMKeeper) *statedb.StateDB
+	}{
+		{
+			"code existed before transaction",
+			func(ctx sdk.Context, keeper *mocks.EVMKeeper) *statedb.StateDB {
+				db := statedb.New(ctx, keeper, emptyTxConfig)
+				db.CreateAccount(address)
+				db.SetCode(address, sharedCode)
+				db.CreateContract(address)
+				suite.Require().NoError(db.Commit())
+
+				db = statedb.New(ctx, keeper, emptyTxConfig)
+				db.CreateAccount(address2)
+				db.SetCode(address2, sharedCode)
+				db.CreateContract(address2)
+				return db
+			},
+		},
+		{
+			"code belongs to same-transaction survivor",
+			func(ctx sdk.Context, keeper *mocks.EVMKeeper) *statedb.StateDB {
+				db := statedb.New(ctx, keeper, emptyTxConfig)
+				db.CreateAccount(address)
+				db.SetCode(address, sharedCode)
+				db.CreateContract(address)
+				db.CreateAccount(address2)
+				db.SetCode(address2, sharedCode)
+				db.CreateContract(address2)
+				return db
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			ctx := sdk.Context{}.WithEventManager(sdk.NewEventManager())
+			keeper := mocks.NewEVMKeeper()
+			db := tc.malleate(ctx, keeper)
+
+			_, selfDestructed := db.SelfDestruct6780(address2)
+			suite.Require().True(selfDestructed)
+			suite.Require().NoError(db.Commit())
+
+			db = statedb.New(ctx, keeper, emptyTxConfig)
+			suite.Require().False(db.Exist(address2))
+			suite.Require().Equal(sharedCode, keeper.GetCode(ctx, sharedCodeHash))
+			suite.Require().Equal(sharedCode, db.GetCode(address))
 		})
 	}
 }

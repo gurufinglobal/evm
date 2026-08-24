@@ -65,6 +65,9 @@ type StateDB struct {
 	nextRevisionID int
 
 	stateObjects map[common.Address]*stateObject
+	// codePreexisting records whether code hashes assigned during this transaction
+	// already existed before any precompile cache writes.
+	codePreexisting map[common.Hash]bool
 
 	txConfig TxConfig
 
@@ -155,6 +158,7 @@ func New(ctx sdk.Context, keeper Keeper, txConfig TxConfig) *StateDB {
 		keeper:               keeper,
 		ctx:                  ctx,
 		stateObjects:         make(map[common.Address]*stateObject),
+		codePreexisting:      make(map[common.Hash]bool),
 		journal:              newJournal(),
 		accessList:           newAccessList(),
 		transientStorage:     newTransientStorage(),
@@ -504,7 +508,13 @@ func (s *StateDB) SetCode(addr common.Address, code []byte) []byte {
 	var prev []byte
 	if stateObject != nil {
 		prev = slices.Clone(stateObject.code)
-		stateObject.SetCode(crypto.Keccak256Hash(code), code)
+		codeHash := crypto.Keccak256Hash(code)
+		if !types.IsEmptyCodeHash(codeHash.Bytes()) {
+			if _, tracked := s.codePreexisting[codeHash]; !tracked {
+				s.codePreexisting[codeHash] = len(s.keeper.GetCode(s.ctx, codeHash)) > 0
+			}
+		}
+		stateObject.SetCode(codeHash, code)
 	}
 	return prev
 }
@@ -738,11 +748,36 @@ func (s *StateDB) FlushToCacheCtx() error {
 // commitWithCtx writes the dirty states to keeper
 // using the provided context
 func (s *StateDB) commitWithCtx(ctx sdk.Context) error {
-	for _, addr := range s.journal.sortedDirties() {
+	dirtyAddresses := s.journal.sortedDirties()
+	liveCodeHashes := make(map[common.Hash]struct{})
+	for _, addr := range dirtyAddresses {
+		obj := s.stateObjects[addr]
+		if obj != nil && !obj.selfDestructed && obj.dirtyCode && !types.IsEmptyCodeHash(obj.CodeHash()) {
+			liveCodeHashes[common.BytesToHash(obj.CodeHash())] = struct{}{}
+		}
+	}
+
+	for _, addr := range dirtyAddresses {
 		obj := s.stateObjects[addr]
 		if obj.selfDestructed {
-			if err := s.keeper.DeleteAccount(ctx, obj.Address()); err != nil {
+			deleteCtx := ctx
+			if obj.newContract {
+				deleteCtx = withNewContractDeletion(ctx, obj.Address())
+			}
+			if err := s.keeper.DeleteAccount(deleteCtx, obj.Address()); err != nil {
 				return errorsmod.Wrapf(err, "failed to delete account %s", obj.Address())
+			}
+
+			codeHash := common.BytesToHash(obj.CodeHash())
+			codePreexisting, codeTracked := s.codePreexisting[codeHash]
+			_, codeIsLive := liveCodeHashes[codeHash]
+			if obj.newContract &&
+				!types.IsEmptyCodeHash(obj.CodeHash()) &&
+				codeTracked &&
+				!codePreexisting &&
+				!codeIsLive &&
+				len(s.keeper.GetCode(ctx, codeHash)) > 0 {
+				s.keeper.DeleteCode(ctx, obj.CodeHash())
 			}
 		} else {
 			if obj.code != nil && obj.dirtyCode {

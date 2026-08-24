@@ -159,32 +159,94 @@ func (s *KeeperTestSuite) TestCommitIdempotencyWithCodeDeletion() {
 func (s *KeeperTestSuite) TestCommitIdempotencyWithSelfDestruct() {
 	s.SetupTest()
 	evmKeeper := s.Network.App.GetEVMKeeper()
+	accountKeeper := s.Network.App.GetAccountKeeper()
 
 	addr := common.BytesToAddress([]byte("testaddr"))
+	directAddr := common.BytesToAddress([]byte("direct-delete"))
+	code := []byte{0x60, 0x42}
+	codeHash := crypto.Keccak256Hash(code)
 
-	// Setup: Create account and self-destruct
+	// Deleting before any flush must not materialize an auth account merely to
+	// satisfy DeleteAccount's persisted-code check.
+	accountNumberInitial, err := accountKeeper.AccountNumber.Peek(s.Network.GetContext())
+	s.Require().NoError(err)
+	directDB := s.StateDB()
+	directDB.CreateAccount(directAddr)
+	directDB.SetCode(directAddr, code)
+	directDB.CreateContract(directAddr)
+	_, selfDestructed := directDB.SelfDestruct6780(directAddr)
+	s.Require().True(selfDestructed)
+	s.Require().NoError(directDB.Commit())
+	accountNumberAfterDirect, err := accountKeeper.AccountNumber.Peek(s.Network.GetContext())
+	s.Require().NoError(err)
+	s.Require().Equal(accountNumberInitial, accountNumberAfterDirect)
+	s.Require().Nil(evmKeeper.GetAccount(s.Network.GetContext(), directAddr))
+	s.Require().Empty(evmKeeper.GetCode(s.Network.GetContext(), codeHash))
+
+	// Persist a newly created contract as a precompile flush would, then delete it
+	// while the StateDB still carries the same-transaction creation marker.
 	db := s.StateDB()
 	cacheCtx, err := db.GetCacheContext()
 	s.Require().NoError(err)
 	db.CreateAccount(addr)
-	db.SelfDestruct(addr)
+	db.SetCode(addr, code)
+	db.CreateContract(addr)
 	err = db.FlushToCacheCtx()
 	s.Require().NoError(err)
+	s.Require().Equal(code, evmKeeper.GetCode(cacheCtx, codeHash))
+	s.Require().NotNil(evmKeeper.GetAccount(cacheCtx, addr))
 
-	account1 := evmKeeper.GetAccount(cacheCtx, addr)
+	accountNumberBefore, err := accountKeeper.AccountNumber.Peek(cacheCtx)
+	s.Require().NoError(err)
+	_, selfDestructed = db.SelfDestruct6780(addr)
+	s.Require().True(selfDestructed)
 
 	// Multiple commits without changes should be idempotent
 	err = db.FlushToCacheCtx()
 	s.Require().NoError(err)
-	account2 := evmKeeper.GetAccount(cacheCtx, addr)
-
 	err = db.FlushToCacheCtx()
 	s.Require().NoError(err)
-	account3 := evmKeeper.GetAccount(cacheCtx, addr)
+	err = db.FlushToCacheCtx()
+	s.Require().NoError(err)
 
-	s.Require().Nil(account1)
-	s.Require().Nil(account2)
-	s.Require().Nil(account3)
+	accountNumberAfter, err := accountKeeper.AccountNumber.Peek(cacheCtx)
+	s.Require().NoError(err)
+	s.Require().Equal(accountNumberBefore, accountNumberAfter)
+	s.Require().Nil(evmKeeper.GetAccount(cacheCtx, addr))
+	s.Require().Empty(evmKeeper.GetCode(cacheCtx, codeHash))
+
+	// Final Commit replays the journal against the parent context without
+	// recreating the account or consuming another account number.
+	err = db.Commit()
+	s.Require().NoError(err)
+	parentAccountNumber, err := accountKeeper.AccountNumber.Peek(s.Network.GetContext())
+	s.Require().NoError(err)
+	s.Require().Equal(accountNumberBefore, parentAccountNumber)
+	s.Require().Nil(evmKeeper.GetAccount(s.Network.GetContext(), addr))
+	s.Require().Empty(evmKeeper.GetCode(s.Network.GetContext(), codeHash))
+}
+
+func (s *KeeperTestSuite) TestSameTxSelfDestructWithEmptyRuntime() {
+	s.SetupTest()
+	evmKeeper := s.Network.App.GetEVMKeeper()
+	addr := common.BytesToAddress([]byte("empty-runtime"))
+
+	// Create a pre-funded account in an earlier transaction.
+	db := s.StateDB()
+	db.AddBalance(addr, uint256.NewInt(50), 0)
+	s.Require().NoError(db.Commit())
+	s.Require().NotNil(evmKeeper.GetAccount(s.Network.GetContext(), addr))
+
+	// A constructor can SELFDESTRUCT before returning runtime code.
+	db = s.StateDB()
+	db.SetCode(addr, nil)
+	db.CreateContract(addr)
+	_, selfDestructed := db.SelfDestruct6780(addr)
+	s.Require().True(selfDestructed)
+	s.Require().NoError(db.Commit())
+
+	s.Require().Nil(evmKeeper.GetAccount(s.Network.GetContext(), addr))
+	s.Require().True(evmKeeper.GetBalance(s.Network.GetContext(), addr).IsZero())
 }
 
 // accountState captures relevant account state for comparison

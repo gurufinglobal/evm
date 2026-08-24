@@ -286,7 +286,6 @@ func (k *Keeper) DeleteCode(ctx sdk.Context, codeHash []byte) {
 
 // DeleteAccount handles contract's suicide call:
 // - clear balance
-// - remove code
 // - remove states
 // - remove the code hash
 // - remove auth account
@@ -297,8 +296,10 @@ func (k *Keeper) DeleteAccount(ctx sdk.Context, addr common.Address) error {
 		return nil
 	}
 
-	// NOTE: only Ethereum contracts can be self-destructed
-	if !k.IsContract(ctx, addr) {
+	// Only persisted Ethereum contracts can be self-destructed through ordinary
+	// calls. StateDB separately authorizes contracts created and self-destructed
+	// in the current transaction, including contracts with empty runtime code.
+	if !statedb.IsNewContractDeletionAuthorized(ctx, addr) && !k.IsContract(ctx, addr) {
 		return errors.New("only smart contracts can be self-destructed")
 	}
 

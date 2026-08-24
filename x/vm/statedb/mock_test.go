@@ -102,15 +102,21 @@ func (k MockKeeper) DeleteCode(_ sdk.Context, codeHash []byte) {
 	delete(k.codes, common.BytesToHash(codeHash))
 }
 
-func (k MockKeeper) DeleteAccount(_ sdk.Context, addr common.Address) error {
+func (k MockKeeper) DeleteAccount(ctx sdk.Context, addr common.Address) error {
 	if addr == errAddress {
 		return errors.New("mock db error")
 	}
-	old := k.accounts[addr]
-	delete(k.accounts, addr)
-	if !types.IsEmptyCodeHash(old.account.CodeHash) {
-		delete(k.codes, common.BytesToHash(old.account.CodeHash))
+	old, exists := k.accounts[addr]
+	if !exists {
+		return nil
 	}
+	if !statedb.IsNewContractDeletionAuthorized(ctx, addr) {
+		code := k.codes[common.BytesToHash(old.account.CodeHash)]
+		if types.IsEmptyCodeHash(old.account.CodeHash) || len(code) == 0 {
+			return errors.New("only smart contracts can be self-destructed")
+		}
+	}
+	delete(k.accounts, addr)
 	return nil
 }
 

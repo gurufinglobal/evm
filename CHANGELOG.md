@@ -16,6 +16,7 @@
 - [\#968](https://github.com/cosmos/evm/pull/968), [\#1103](https://github.com/cosmos/evm/pull/1103), [\#1164](https://github.com/cosmos/evm/pull/1164) Use normal KV gas metering in ERC20 IBC callbacks and ICS20 transfers.
 - [\#1079](https://github.com/cosmos/evm/pull/1079) Make EVM access-control list comparisons case-insensitive.
 - [\#1061](https://github.com/cosmos/evm/pull/1061) Block nested ICS20 forwarding in source callbacks.
+- [\#905](https://github.com/cosmos/evm/pull/905) Fix EIP-6780 same-transaction selfdestruct for pre-funded and empty-runtime contracts without preparatory account persistence.
 
 ## v0.6.2
 
