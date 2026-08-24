@@ -12,6 +12,8 @@
 
 ### BUG FIXES
 
+- [\#993](https://github.com/cosmos/evm/pull/993) Enforce `src_callback` contract address to match the packet sender for IBC acknowledgement and timeout callbacks.
+
 ## v0.6.2
 
 ### IMPROVEMENTS
