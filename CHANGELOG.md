@@ -14,6 +14,7 @@
 
 - [\#993](https://github.com/cosmos/evm/pull/993) Enforce `src_callback` contract address to match the packet sender for IBC acknowledgement and timeout callbacks.
 - [\#968](https://github.com/cosmos/evm/pull/968), [\#1103](https://github.com/cosmos/evm/pull/1103), [\#1164](https://github.com/cosmos/evm/pull/1164) Use normal KV gas metering in ERC20 IBC callbacks and ICS20 transfers.
+- [\#1079](https://github.com/cosmos/evm/pull/1079) Make EVM access-control list comparisons case-insensitive.
 
 ## v0.6.2
 
