@@ -295,13 +295,15 @@ proto-check-breaking:
 ###############################################################################
 
 PACKAGE_NAME:=github.com/cosmos/evm
-GOLANG_CROSS_VERSION  = v1.22
+GOLANG_CROSS_VERSION  = v1.26.5
+GO_TOOLCHAIN_VERSION  = go1.26.7
 GOPATH ?= '$(HOME)/go'
 release-dry-run:
 	docker run \
 		--rm \
 		--privileged \
 		-e CGO_ENABLED=1 \
+		-e GOTOOLCHAIN=$(GO_TOOLCHAIN_VERSION) \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v `pwd`:/go/src/$(PACKAGE_NAME) \
 		-v ${GOPATH}/pkg:/go/pkg \
@@ -318,6 +320,7 @@ release:
 		--rm \
 		--privileged \
 		-e CGO_ENABLED=1 \
+		-e GOTOOLCHAIN=$(GO_TOOLCHAIN_VERSION) \
 		--env-file .release-env \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v `pwd`:/go/src/$(PACKAGE_NAME) \

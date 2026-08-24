@@ -4,6 +4,8 @@
 
 ### DEPENDENCIES
 
+- Pin Go 1.26.7 and update vulnerable Go dependencies to security-fixed releases.
+
 ### API-BREAKING
 
 ### IMPROVEMENTS

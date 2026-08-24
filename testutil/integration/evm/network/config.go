@@ -122,7 +122,7 @@ func WithChainID(chainID testconstants.ChainID) ConfigOption {
 	if !found {
 		panic(fmt.Sprintf(
 			"chain id %q not found in chain coin info; available: %v",
-			chainID,
+			chainID.ChainID,
 			testconstants.ExampleChainCoinInfo,
 		))
 	}
