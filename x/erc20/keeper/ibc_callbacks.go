@@ -13,7 +13,6 @@ import (
 	"github.com/cosmos/ibc-go/v10/modules/core/exported"
 
 	errorsmod "cosmossdk.io/errors"
-	storetypes "cosmossdk.io/store/types"
 
 	"github.com/cosmos/cosmos-sdk/telemetry"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -49,11 +48,6 @@ func (k Keeper) OnRecvPacket(
 		err = errorsmod.Wrapf(errortypes.ErrInvalidType, "cannot unmarshal ICS-20 transfer packet data")
 		return channeltypes.NewErrorAcknowledgement(err)
 	}
-
-	// use a zero gas config to avoid extra costs for the relayers
-	ctx = ctx.
-		WithKVGasConfig(storetypes.GasConfig{}).
-		WithTransientKVGasConfig(storetypes.GasConfig{})
 
 	// recipient (local chain address): accept hex or local bech32
 	recipientBz, err := k.addrCodec.StringToBytes(data.Receiver)
@@ -215,11 +209,6 @@ func (k Keeper) ConvertCoinToERC20FromPacket(ctx sdk.Context, data transfertypes
 
 	// Case 2. if pair is native ERC20 -> unescrow
 	case pair.IsNativeERC20():
-		// use a zero gas config to avoid extra costs for the relayers
-		ctx = ctx.
-			WithKVGasConfig(storetypes.GasConfig{}).
-			WithTransientKVGasConfig(storetypes.GasConfig{})
-
 		params := k.GetParams(ctx)
 		if !params.EnableErc20 || !k.IsDenomRegistered(ctx, coin.Denom) {
 			// no-op, ERC20s are disabled or the denom is not registered
