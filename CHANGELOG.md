@@ -17,6 +17,7 @@
 
 - Isolate experimental EVM mempool removal validation from shared query state, events, and gas meters, and synchronize its block-height read.
 - Avoid a shutdown panic when evmd has no configured EVM mempool.
+- Prevent RPC stream subscribers from missing notifications between checking for data and waiting.
 - [\#993](https://github.com/cosmos/evm/pull/993) Enforce `src_callback` contract address to match the packet sender for IBC acknowledgement and timeout callbacks.
 - [\#968](https://github.com/cosmos/evm/pull/968), [\#1103](https://github.com/cosmos/evm/pull/1103), [\#1164](https://github.com/cosmos/evm/pull/1164) Use normal KV gas metering in ERC20 IBC callbacks and ICS20 transfers.
 - [\#1079](https://github.com/cosmos/evm/pull/1079) Make EVM access-control list comparisons case-insensitive.

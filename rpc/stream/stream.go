@@ -130,8 +130,7 @@ func (s *Stream[V]) ReadBlocking(ctx context.Context, offset int) ([]V, int) {
 			return items, offset
 		}
 
-		s.mutex.RUnlock()
-		r := s.cond.Wait(ctx)
+		r := s.cond.wait(ctx, s.mutex.RUnlock)
 		s.mutex.RLock()
 
 		if !r {
