@@ -43,5 +43,7 @@ jobs:
             *.toml
       - name: run system tests
         run: |
+          git fetch --no-tags https://github.com/cosmos/evm.git refs/tags/v0.5.1:refs/tags/v0.5.1
+          test "$(git rev-parse 'refs/tags/v0.5.1^{commit}')" = "e2f6e47c70b77bfb375ae27b7aa24082aabe6884"
           make test-system
         if: env.GIT_DIFF
