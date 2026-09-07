@@ -61,14 +61,20 @@ jobs:
           
           # Run the containerized test suite
           make test-rpc-compat > test_output.log 2>&1 || {
-            echo "⚠️ Test exited with non-zero code, checking results..."
+            cat test_output.log
+            echo "JSON-RPC test execution failed"
+            exit 1
           }
           
           # Display the test output
           cat test_output.log
           
           # Check for failure criterion: count of "Failed" tests > 0
-          failed_count=$(grep -o "Failed:.*[0-9]" test_output.log | grep -o "[0-9]\+" | head -1 || echo "0")
+          failed_count=$(sed -nE 's/.*Failed:[[:space:]]*([0-9]+).*/\1/p' test_output.log)
+          if ! [[ "$failed_count" =~ ^[0-9]+$ ]]; then
+            echo "Missing or invalid JSON-RPC test summary"
+            exit 1
+          fi
           
           echo "📊 Test Results Summary:"
           echo "  Failed tests: $failed_count"
