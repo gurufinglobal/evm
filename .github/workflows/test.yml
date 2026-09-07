@@ -38,6 +38,8 @@ jobs:
             evmd/**/**.go
             *.toml
       - name: Test and Create Coverage Report
+        env:
+          GOFLAGS: -p=1
         run: |
           make test-unit-cover
         if: env.GIT_DIFF
