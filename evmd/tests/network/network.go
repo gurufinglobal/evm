@@ -17,8 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cosmos/evm/utils"
-
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -34,6 +32,8 @@ import (
 	"github.com/cosmos/evm/server/config"
 	evmtestutil "github.com/cosmos/evm/testutil"
 	testconstants "github.com/cosmos/evm/testutil/constants"
+	evmnetwork "github.com/cosmos/evm/testutil/integration/evm/network"
+	"github.com/cosmos/evm/utils"
 
 	"cosmossdk.io/log"
 	"cosmossdk.io/math"
@@ -51,6 +51,7 @@ import (
 	srvconfig "github.com/cosmos/cosmos-sdk/server/config"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	sdktestutil "github.com/cosmos/cosmos-sdk/testutil"
+	sdknetwork "github.com/cosmos/cosmos-sdk/testutil/network"
 	simutils "github.com/cosmos/cosmos-sdk/testutil/sims"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -64,6 +65,25 @@ var (
 	lock     = new(sync.Mutex)
 	portPool = make(chan string, 200)
 )
+
+func init() {
+	// Reserve all ports together so the pool contains distinct available ports,
+	// matching the SDK network helper this harness is based on.
+	closeFns := make([]func() error, 0, cap(portPool))
+	for range cap(portPool) {
+		_, port, closeFn, err := sdknetwork.FreeTCPAddr()
+		if err != nil {
+			panic(err)
+		}
+		portPool <- port
+		closeFns = append(closeFns, closeFn)
+	}
+	for _, closeFn := range closeFns {
+		if err := closeFn(); err != nil {
+			panic(err)
+		}
+	}
+}
 
 // AppConstructor defines a function which accepts a network configuration and
 // creates an ABCI Application to provide to CometBFT.
@@ -134,6 +154,11 @@ func DefaultConfig() Config {
 		KeyringOptions:    []keyring.Option{hd.EthSecp256k1Option()},
 		PrintMnemonic:     false,
 	}
+	var bankGenState banktypes.GenesisState
+	cfg.Codec.MustUnmarshalJSON(cfg.GenesisState[banktypes.ModuleName], &bankGenState)
+	bankGenState.DenomMetadata = append(bankGenState.DenomMetadata,
+		evmnetwork.GenerateBankGenesisMetadata(testconstants.ExampleEIP155ChainID)...)
+	cfg.GenesisState[banktypes.ModuleName] = cfg.Codec.MustMarshalJSON(&bankGenState)
 	return cfg
 }
 
