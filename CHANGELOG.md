@@ -5,6 +5,7 @@
 ### DEPENDENCIES
 
 - Pin Go 1.26.7 and update vulnerable Go dependencies to security-fixed releases.
+- Update IAVL to v1.2.8 to synchronize immutable query reads with concurrent version commits while retaining the v1.2 storage API.
 
 ### API-BREAKING
 
