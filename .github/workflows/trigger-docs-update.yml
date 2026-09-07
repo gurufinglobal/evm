@@ -7,6 +7,7 @@ on:
 
 jobs:
   trigger-docs-update:
+    if: github.repository == 'cosmos/evm'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger docs repository update

@@ -5,6 +5,7 @@
 ### DEPENDENCIES
 
 - Pin Go 1.26.7 and update vulnerable Go dependencies to security-fixed releases.
+- Update IAVL to v1.2.8 to synchronize immutable query reads with concurrent version commits while retaining the v1.2 storage API.
 
 ### API-BREAKING
 
@@ -14,6 +15,9 @@
 
 ### BUG FIXES
 
+- Isolate experimental EVM mempool removal validation from shared query state, events, and gas meters, and synchronize its block-height read.
+- Avoid a shutdown panic when evmd has no configured EVM mempool.
+- Prevent RPC stream subscribers from missing notifications between checking for data and waiting.
 - [\#993](https://github.com/cosmos/evm/pull/993) Enforce `src_callback` contract address to match the packet sender for IBC acknowledgement and timeout callbacks.
 - [\#968](https://github.com/cosmos/evm/pull/968), [\#1103](https://github.com/cosmos/evm/pull/1103), [\#1164](https://github.com/cosmos/evm/pull/1164) Use normal KV gas metering in ERC20 IBC callbacks and ICS20 transfers.
 - [\#1079](https://github.com/cosmos/evm/pull/1079) Make EVM access-control list comparisons case-insensitive.
@@ -23,6 +27,14 @@
 - [\#992](https://github.com/cosmos/evm/pull/992) Respect smaller positive gas caps in internal EVM calls.
 - [\#965](https://github.com/cosmos/evm/pull/965), [\#1083](https://github.com/cosmos/evm/pull/1083) Avoid double charging EVM gas in IBC timeout callbacks.
 - [\#970](https://github.com/cosmos/evm/pull/970) Preserve existing receiver account numbers in IBC destination callbacks.
+
+## v0.6.3
+
+### SECURITY
+
+- [GHSA-367m-g444-9mg3](https://github.com/cosmos/evm/security/advisories/GHSA-367m-g444-9mg3) Make StateDB commits atomic, including precompile-staged changes, so a failed commit cannot persist partial writes.
+- Reject overflowing StateDB balance additions instead of silently wrapping.
+- This release is state-breaking and requires a coordinated upgrade for running chains.
 
 ## v0.6.2
 

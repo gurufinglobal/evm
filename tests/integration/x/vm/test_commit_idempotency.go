@@ -215,8 +215,8 @@ func (s *KeeperTestSuite) TestCommitIdempotencyWithSelfDestruct() {
 	s.Require().Nil(evmKeeper.GetAccount(cacheCtx, addr))
 	s.Require().Empty(evmKeeper.GetCode(cacheCtx, codeHash))
 
-	// Final Commit replays the journal against the parent context without
-	// recreating the account or consuming another account number.
+	// Final Commit atomically publishes the cache without recreating the
+	// account or consuming another account number.
 	err = db.Commit()
 	s.Require().NoError(err)
 	parentAccountNumber, err := accountKeeper.AccountNumber.Peek(s.Network.GetContext())

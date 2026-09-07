@@ -458,7 +458,7 @@ func (s *KeeperTestSuite) TestConvertCoinToERC20FromPacket() {
 	}
 }
 
-func (s *KeeperTestSuite) TestConvertCoinToERC20FromPacket_GasConfigPreserved() {
+func (s *KeeperTestSuite) TestConvertCoinToERC20FromPacketGasConfigPreserved() {
 	s.mintFeeCollector = true
 	defer func() { s.mintFeeCollector = false }()
 	s.SetupTest()

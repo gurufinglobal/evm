@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/require"
 )
@@ -55,48 +55,50 @@ func TestStreamReadNonBlocking(t *testing.T) {
 }
 
 func TestStreamReadBlocking(t *testing.T) {
-	stream := NewStream[int](16, 31)
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // This callback is the test entry point, not a helper.
+		stream := NewStream[int](16, 31)
 
-	wg := sync.WaitGroup{}
+		wg := sync.WaitGroup{}
 
-	ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(context.Background())
 
-	// subscriber
-	subscribers := 10
-	result := make([][]int, subscribers)
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		// subscriber
+		subscribers := 10
+		result := make([][]int, subscribers)
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
 
-			require.NoError(t, stream.Subscribe(ctx, func(items []int, offset int) error {
-				result[i] = append(result[i], items...)
-				return nil
-			}))
-		}(i)
-	}
-
-	// wait for subscribers to setup
-	time.Sleep(100 * time.Millisecond)
-
-	// publisher
-	for i := 0; i < 32; i++ {
-		require.Equal(t, i+1, stream.Add(i))
-	}
-
-	// wait for subscribers to finish
-	time.Sleep(100 * time.Millisecond)
-	cancel()
-	wg.Wait()
-
-	// check result
-	for i := 0; i < subscribers; i++ {
-		require.Equal(t, 32, len(result[i]))
-		require.Equal(t, 31, result[i][len(result[i])-1])
-		for j, n := range result[i][:len(result[i])-1] {
-			require.Equal(t, n+1, result[i][j+1])
+				require.NoError(t, stream.Subscribe(ctx, func(items []int, offset int) error {
+					result[i] = append(result[i], items...)
+					return nil
+				}))
+			}(i)
 		}
-	}
+
+		// Wait until every subscriber has registered and is blocked.
+		synctest.Wait()
+
+		// publisher
+		for i := 0; i < 32; i++ {
+			require.Equal(t, i+1, stream.Add(i))
+		}
+
+		// Wait until every subscriber has consumed the available items.
+		synctest.Wait()
+		cancel()
+		wg.Wait()
+
+		// check result
+		for i := 0; i < subscribers; i++ {
+			require.Equal(t, 32, len(result[i]))
+			require.Equal(t, 31, result[i][len(result[i])-1])
+			for j, n := range result[i][:len(result[i])-1] {
+				require.Equal(t, n+1, result[i][j+1])
+			}
+		}
+	})
 }
 
 func TestStreamReadFromEnd(t *testing.T) {

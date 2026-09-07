@@ -19,6 +19,7 @@ import (
 
 	"cosmossdk.io/log"
 	"cosmossdk.io/math"
+	storetypes "cosmossdk.io/store/types"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -308,7 +309,10 @@ func (m *ExperimentalEVMMempool) Remove(tx sdk.Tx) error {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	if m.blockchain.latestCtx.BlockHeight() == 0 {
+	m.blockchain.mu.RLock()
+	blockHeight := m.blockchain.latestCtx.BlockHeight()
+	m.blockchain.mu.RUnlock()
+	if blockHeight == 0 {
 		return nil
 	}
 
@@ -361,6 +365,11 @@ func (m *ExperimentalEVMMempool) shouldRemoveFromEVMPool(tx sdk.Tx) bool {
 		return false // Cannot validate, keep transaction
 	}
 
+	// Removal validation must not publish ante writes or events into the query
+	// context shared with txpool readers. Gas consumption is private as well.
+	ctx, _ = ctx.CacheContext()
+	ctx = ctx.WithGasMeter(storetypes.NewGasMeter(ctx.GasMeter().Limit())).
+		WithBlockGasMeter(storetypes.NewGasMeter(ctx.BlockGasMeter().Limit()))
 	_, err = m.anteHandler(ctx, tx, true)
 	// Keep nonce gap transactions, remove others that fail validation
 	if errors.Is(err, ErrNonceGap) || errors.Is(err, sdkerrors.ErrInvalidSequence) || errors.Is(err, sdkerrors.ErrOutOfGas) {

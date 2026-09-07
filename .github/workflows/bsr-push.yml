@@ -10,6 +10,7 @@ permissions: read-all
 
 jobs:
   push:
+    if: github.repository == 'cosmos/evm'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
