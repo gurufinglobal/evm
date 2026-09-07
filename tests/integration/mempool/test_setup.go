@@ -1,6 +1,7 @@
 package mempool
 
 import (
+	"io"
 	"time"
 
 	"github.com/stretchr/testify/suite"
@@ -44,6 +45,8 @@ func (s *IntegrationTestSuite) SetupTest() {
 
 // SetupTestWithChainID initializes the test environment with a specific chain ID.
 func (s *IntegrationTestSuite) SetupTestWithChainID(chainID testconstants.ChainID) {
+	// Stop the previous pool before NewUnitTestNetwork resets global test config.
+	s.TearDownTest()
 	s.keyring = keyring.New(20)
 
 	options := []network.ConfigOption{
@@ -53,6 +56,7 @@ func (s *IntegrationTestSuite) SetupTestWithChainID(chainID testconstants.ChainI
 	options = append(options, s.options...)
 
 	nw := network.NewUnitTestNetwork(s.create, options...)
+	s.network = nw
 	gh := grpc.NewIntegrationHandler(nw)
 	tf := factory.New(nw, gh)
 
@@ -80,8 +84,17 @@ func (s *IntegrationTestSuite) SetupTestWithChainID(chainID testconstants.ChainI
 	initialCount := mempool.CountTx()
 	s.Require().Equal(0, initialCount, "mempool should be empty initially")
 
-	s.network = nw
 	s.factory = tf
+}
+
+func (s *IntegrationTestSuite) TearDownTest() {
+	if s.network != nil {
+		nw := s.network
+		s.network = nil
+		app, ok := nw.App.(io.Closer)
+		s.Require().True(ok, "mempool test application must support shutdown")
+		s.Require().NoError(app.Close())
+	}
 }
 
 // FundAccount funds an account with a specific amount of a given denomination.
