@@ -24,6 +24,14 @@
 - [\#965](https://github.com/cosmos/evm/pull/965), [\#1083](https://github.com/cosmos/evm/pull/1083) Avoid double charging EVM gas in IBC timeout callbacks.
 - [\#970](https://github.com/cosmos/evm/pull/970) Preserve existing receiver account numbers in IBC destination callbacks.
 
+## v0.6.3
+
+### SECURITY
+
+- [GHSA-367m-g444-9mg3](https://github.com/cosmos/evm/security/advisories/GHSA-367m-g444-9mg3) Make StateDB commits atomic, including precompile-staged changes, so a failed commit cannot persist partial writes.
+- Reject overflowing StateDB balance additions instead of silently wrapping.
+- This release is state-breaking and requires a coordinated upgrade for running chains.
+
 ## v0.6.2
 
 ### IMPROVEMENTS
