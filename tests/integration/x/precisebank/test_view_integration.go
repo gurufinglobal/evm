@@ -122,6 +122,8 @@ func (s *KeeperIntegrationTestSuite) TestKeeperHiddenReserve() {
 
 	moduleAddr := authtypes.NewModuleAddress(types.ModuleName)
 	addr1 := sdk.AccAddress{1}
+	initialReserve := s.network.App.GetBankKeeper().GetBalance(s.network.GetContext(), moduleAddr, types.IntegerCoinDenom())
+	s.Require().True(initialReserve.IsZero(), "fixture must start with an empty reserve")
 
 	// Make the reserve hold a non-zero balance
 	// Mint fractional coins to an account, which should cause a mint of 1
@@ -139,9 +141,9 @@ func (s *KeeperIntegrationTestSuite) TestKeeperHiddenReserve() {
 	// Check underlying x/bank balance for reserve
 	reserveIntCoin := s.network.App.GetBankKeeper().GetBalance(s.network.GetContext(), moduleAddr, types.IntegerCoinDenom())
 	s.Require().Equal(
-		sdkmath.NewInt(2), // Network setup creates 1, test mints 1 more = 2 total
+		sdkmath.OneInt(),
 		reserveIntCoin.Amount,
-		"reserve should hold 2 integer coins (1 from network setup + 1 from test mint)",
+		"reserve should hold the one integer coin backing the test's fractional balance",
 	)
 
 	tests := []struct {
@@ -160,7 +162,7 @@ func (s *KeeperIntegrationTestSuite) TestKeeperHiddenReserve() {
 			"reserve account - visible integer denom",
 			moduleAddr,
 			types.IntegerCoinDenom(),
-			sdkmath.NewInt(2), // Network setup creates 1, test mints 1 more = 2 total
+			sdkmath.OneInt(),
 		},
 		{
 			"user account - visible extended denom",
