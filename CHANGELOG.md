@@ -15,6 +15,7 @@
 
 ### BUG FIXES
 
+- Avoid nil fee dereferences when decoding empty EIP-712 protobuf sign documents.
 - Isolate experimental EVM mempool removal validation from shared query state, events, and gas meters, and synchronize its block-height read.
 - Avoid a shutdown panic when evmd has no configured EVM mempool.
 - Prevent RPC stream subscribers from missing notifications between checking for data and waiting.
@@ -24,9 +25,18 @@
 - [\#1061](https://github.com/cosmos/evm/pull/1061) Block nested ICS20 forwarding in source callbacks.
 - [\#905](https://github.com/cosmos/evm/pull/905) Fix EIP-6780 same-transaction selfdestruct for pre-funded and empty-runtime contracts without preparatory account persistence.
 - [\#817](https://github.com/cosmos/evm/pull/817), [\#920](https://github.com/cosmos/evm/pull/920) Decode validator operator addresses for `block.coinbase` and return zero when no proposer exists.
-- [\#992](https://github.com/cosmos/evm/pull/992) Respect smaller positive gas caps in internal EVM calls.
 - [\#965](https://github.com/cosmos/evm/pull/965), [\#1083](https://github.com/cosmos/evm/pull/1083) Avoid double charging EVM gas in IBC timeout callbacks.
 - [\#970](https://github.com/cosmos/evm/pull/970) Preserve existing receiver account numbers in IBC destination callbacks.
+
+## v0.6.4
+
+### BUG FIXES
+
+- [GHSA-p8x8-4gg6-prcc](https://github.com/cosmos/evm/security/advisories/GHSA-p8x8-4gg6-prcc) Cap an internal EVM call's gas limit at the gas remaining on the transaction's gas meter, and charge the EVM gas it used to the Cosmos gas meter when the post-execution `StateDB` commit or flush fails.
+- [GHSA-7xxp-gq2c-x47x](https://github.com/cosmos/evm/security/advisories/GHSA-7xxp-gq2c-x47x) Reject EIP-712 signed transactions that set `timeout_timestamp`, `unordered`, a fee granter, or a fee payer, since these fields are excluded from the EIP-712 typed data and are not covered by the signature.
+- [GHSA-c6xv-pppp-rjw6](https://github.com/cosmos/evm/security/advisories/GHSA-c6xv-pppp-rjw6) Refuse to self-destruct a contract that still has delegations, redelegations or unbonding delegations.
+- [GHSA-wm4f-qpxp-rch4](https://github.com/cosmos/evm/security/advisories/GHSA-wm4f-qpxp-rch4) Check the precompile call limit before incrementing the counter and widen it to `uint64`, so rejected calls can no longer wrap it and reopen call slots. Reverted precompile calls still count against the limit.
+- [\#1277](https://github.com/cosmos/evm/pull/1277) Reject invalid addresses in `tx evm send` instead of silently building a `MsgSend` to a mangled recipient, and pass bech32 recipients through unchanged.
 
 ## v0.6.3
 
